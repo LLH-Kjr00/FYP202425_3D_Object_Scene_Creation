@@ -1,0 +1,170 @@
+# In case you accidentally deleted or modified the script to a point that it is not runnable...
+# I gotchu back, here is the backup version
+
+# By Ken Lung, edited on 15/03/2025
+
+import bpy
+import os
+
+# Get the directory of the current .blend file
+blend_file_path = bpy.data.filepath
+blend_file_directory = os.path.dirname(blend_file_path)
+
+# Set the working directory to the .blend file's directory
+os.chdir(blend_file_directory)
+
+# Now, Blender will read files from the current directory
+print(f"Working directory set to: {blend_file_directory}")
+
+parent_directory = os.path.dirname(blend_file_directory)
+
+base_name_list = []
+input_folder = os.path.join(parent_directory, "Input")  # Better practice
+
+for path in os.listdir(input_folder):
+    check_file = os.path.join(input_folder, path)
+    print(check_file)
+    if os.path.isfile(check_file) and check_file.lower().endswith('.obj'):
+        # Extract the base name without extension
+        file_name = os.path.splitext(os.path.basename(check_file))
+        base_name = file_name[0]  # Update base_name
+        base_name_list.append(base_name)  # Append the correct base name
+
+
+
+for file_name in base_name_list:
+
+    # Define the paths to your high-res and low-res models
+    model_name = file_name  # Put the name of the model
+    high_res_model_path = os.path.abspath(f"{parent_directory}/Input/{model_name}.obj")  # Use absolute path
+    low_res_model_path = os.path.abspath(f"{parent_directory}/Output/Finished/{model_name}_finished.obj")  # Use absolute path
+
+    # Check if the files exist
+    if not os.path.exists(high_res_model_path):
+        raise FileNotFoundError(f"High-res model not found at {high_res_model_path}")
+    if not os.path.exists(low_res_model_path):
+        raise FileNotFoundError(f"Low-res model not found at {low_res_model_path}")
+
+    # SET UP THE MODELS
+    # Load the high-res model
+    bpy.ops.wm.obj_import(filepath=high_res_model_path)
+    high_res_model = bpy.context.selected_objects[0]
+    high_res_model.name = model_name+"_HighResModel"
+
+    # Load the low-res model
+    bpy.ops.wm.obj_import(filepath=low_res_model_path)
+    low_res_model = bpy.context.selected_objects[0]
+    low_res_model.name = model_name+"_LowResModel"
+
+    # Scale down the low-res model by 0.001
+    low_res_model.scale = (0.999, 0.999, 0.999)
+
+    # Ensure both models are at the origin (0, 0, 0)
+    high_res_model.location = (0, 0, 0)
+    low_res_model.location = (0, 0, 0)
+
+    print("Models loaded, scaled, and positioned successfully!")
+
+
+    # SET UP A 4K TEXTURE FOR THE LOW RESOLUTION MODEL
+    # Make sure the low-res model is selected and active
+    bpy.context.view_layer.objects.active = low_res_model
+    low_res_model.select_set(True)
+
+    # Create a new image for baking (high resolution)
+    image_name = model_name+"_BakedTextureHighRes"
+    bake_image_high_res = bpy.data.images.new(image_name, width=4096, height=4096)
+
+    # Get or create the material for the low-res model
+    if low_res_model.data.materials:
+        material = low_res_model.data.materials[0]
+    else:
+        material = bpy.data.materials.new(name=model_name+"_LowResMaterial")
+        low_res_model.data.materials.append(material)
+
+    # Enable nodes for the material
+    material.use_nodes = True
+    nodes = material.node_tree.nodes
+    links = material.node_tree.links
+
+    # Clear default nodes (optional, to start fresh)
+    nodes.clear()
+
+    # Add a Principled BSDF Node
+    bsdf = nodes.new(type='ShaderNodeBsdfPrincipled')
+    bsdf.location = (0, 0)
+
+    # Add an Image Texture Node
+    image_texture = nodes.new(type='ShaderNodeTexImage')
+    image_texture.image = bake_image_high_res
+    image_texture.location = (-300, 0)
+
+    # Add an Output Node
+    output = nodes.new(type='ShaderNodeOutputMaterial')
+    output.location = (300, 0)
+
+    # Link the Image Texture Node to the Principled BSDF Node
+    links.new(image_texture.outputs['Color'], bsdf.inputs['Base Color'])
+
+    # Link the Principled BSDF Node to the Output Node
+    links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
+
+
+    # SMART UNWRAP THE LOW RESOLUTION MODEL 
+    # Enter Edit Mode and select all vertices
+    bpy.ops.object.mode_set(mode='EDIT')
+    bpy.ops.mesh.select_all(action='SELECT')
+
+    # Smart UV Project with an island margin of 0.01
+    bpy.ops.uv.smart_project(island_margin=0.01)
+
+    # Return to Object Mode
+    bpy.ops.object.mode_set(mode='OBJECT')
+
+    print("Low-res model smart unwrapped with an island margin of 0.01.")
+
+# SETUP BAKING
+# Switch to Cycles Render Engine
+bpy.context.scene.render.engine = 'BLENDER_WORKBENCH'
+bpy.context.scene.render.engine = 'CYCLES'
+
+# Configure Bake Settings
+bpy.context.scene.cycles.bake_type = 'DIFFUSE'
+bpy.context.scene.render.bake.use_selected_to_active = True
+bpy.context.scene.render.bake.use_cage = True
+bpy.context.scene.render.bake.cage_extrusion = 0.01  # Adjust as needed
+bpy.context.scene.render.bake.margin_type = 'ADJACENT_FACES'
+
+bakeMargin_pxSize = 24 # Usually, 24 should be good but you can adjust it if the end product is not good
+bpy.context.scene.render.bake.margin = bakeMargin_pxSize
+
+bpy.context.scene.render.bake.use_clear = True  # Clear the baked image before baking
+bpy.context.scene.render.bake.use_pass_direct = False
+bpy.context.scene.render.bake.use_pass_indirect = False
+
+
+# That is about it
+
+# For the sake of double checking and visible progress view (to prevent FURIOUS CLICKING at a WORKING PROCESS)...
+# The script will NOT actually bake the texture
+
+# ACTUAL BAKING
+# First, go to "Shading" to select the image texture node
+# of the high resolution model and the low resolution model respectively
+# Then, ensure the high-res model is selected
+# Ensure the low-res model is selected AND active
+# (You can do so by pressing on the high resolution model first, press "Ctrl" then press on low resolution model 
+
+# Go to "Render View" and press the "Bake" button to bake
+# Do not need to worry the setting cuz the script does that for you 
+
+# Note: It WILL take a while to bake the texture as it is 4K texture straight away
+# PLEASE BE PATIENT PLEASE BE PATIENT PLEASE BE PATIENT
+
+# After the texture is baked, go to "UV Editing" and save the new texture to a folder 
+# (Preferrablly under the folder "BakedResult")
+# You don't even need to change the file name
+
+# Make sure to delete AND purge the data (search online to know what is it) before processing the next set of models, just in case 
+
+# :D
