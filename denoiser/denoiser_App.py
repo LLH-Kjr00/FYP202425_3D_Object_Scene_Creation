@@ -7,7 +7,7 @@ import os
 
 def main():
     
-    input_folder = "Input/"
+    input_folder = "denoiser/Input/"
 
     model_denoiser = ModelDenoiser()
     model_exporter = ModelExporter()
@@ -71,15 +71,15 @@ def main():
         
 
             
-    all_entries = os.listdir("Output/Intermediate/")
+    all_entries = os.listdir("denoiser/Output/Intermediate/")
     
     # Filter and count only directories
-    folder_names = [entry for entry in all_entries if os.path.isdir(os.path.join("Output/Intermediate/", entry))]
+    folder_names = [entry for entry in all_entries if os.path.isdir(os.path.join("denoiser/Output/Intermediate/", entry))]
     
     for name in folder_names: 
-        folder_to_zip = f"Output/Intermediate/{name}/"
+        folder_to_zip = f"denoiser/Output/Intermediate/{name}/"
         
-        output_zip_file = f"Output/Zips/{name}.zip"
+        output_zip_file = f"denoiser/Output/Zips/{name}.zip"
         file_zipper.zip_folder(folder_to_zip, output_zip_file)
         print(f"[main] - All files in {folder_to_zip} are zipped into {output_zip_file}")
     
