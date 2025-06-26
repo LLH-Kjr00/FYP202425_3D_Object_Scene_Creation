@@ -1,0 +1,13 @@
+# Core dependencies
+numpy
+scipy
+
+# 3D mesh processing
+pyvista
+trimesh
+open3d
+pymeshfix
+fast-simplification
+
+# File handling
+pyzip
